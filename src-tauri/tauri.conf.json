@@ -11,15 +11,15 @@
   },
   "app": {
     "windows": [
-  {
-    "title": "AI Usage Monitor",
-    "width": 620,
-    "height": 420,
-    "resizable": false,
-    "decorations": true,
-    "alwaysOnTop": true
-  }
-],
+      {
+        "title": "AI Usage Monitor",
+        "width": 620,
+        "height": 420,
+        "resizable": false,
+        "decorations": true,
+        "alwaysOnTop": true
+      }
+    ],
     "security": {
       "csp": null
     }

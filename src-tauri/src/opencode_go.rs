@@ -59,12 +59,12 @@ pub async fn opencode_go_usage(config_path: Option<String>) -> Result<OpenCodeGo
     let client = reqwest::Client::new();
 
     let api_key = config
-    .api_key
-    .as_deref()
-    .map(str::trim)
-    .filter(|v| !v.is_empty())
-    .map(str::to_string)
-    .or_else(|| read_opencode_go_key(config.auth_file.as_deref()).ok());
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .or_else(|| read_opencode_go_key(config.auth_file.as_deref()).ok());
 
     let model_count = match api_key.as_deref() {
         Some(api_key) => fetch_model_count(&client, api_key).await.ok(),
@@ -124,10 +124,7 @@ fn find_config_path(custom_path: Option<String>) -> Result<PathBuf, String> {
         }
     }
 
-    Err(
-        "未找到 OpenCode Go 配置文件。请创建 %APPDATA%\\ai-usage-monitor\\opencode-go.json"
-            .to_string(),
-    )
+    Err("未找到 OpenCode Go 配置文件。请创建 %APPDATA%\\ai-usage-monitor\\opencode-go.json".to_string())
 }
 
 fn config_candidates() -> Vec<PathBuf> {
@@ -161,8 +158,7 @@ fn config_candidates() -> Vec<PathBuf> {
 }
 
 fn read_config(path: &PathBuf) -> Result<OpenCodeGoConfig, String> {
-    let text = fs::read_to_string(path)
-        .map_err(|e| format!("读取 OpenCode Go 配置失败: {e}"))?;
+    let text = fs::read_to_string(path).map_err(|e| format!("读取 OpenCode Go 配置失败: {e}"))?;
 
     serde_json::from_str::<OpenCodeGoConfig>(&text)
         .map_err(|e| format!("解析 OpenCode Go 配置失败: {e}"))
@@ -175,11 +171,10 @@ fn read_opencode_go_key(custom_auth_file: Option<&str>) -> Result<String, String
         find_opencode_auth_file()?
     };
 
-    let text = fs::read_to_string(&auth_file)
-        .map_err(|e| format!("读取 OpenCode auth.json 失败: {e}"))?;
+    let text = fs::read_to_string(&auth_file).map_err(|e| format!("读取 OpenCode auth.json 失败: {e}"))?;
 
-    let value: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("解析 OpenCode auth.json 失败: {e}"))?;
+    let value: Value =
+        serde_json::from_str(&text).map_err(|e| format!("解析 OpenCode auth.json 失败: {e}"))?;
 
     value
         .get("opencode-go")
@@ -271,9 +266,13 @@ async fn fetch_dashboard_html(
     let status = response.status();
 
     if !status.is_success() {
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("OpenCode Go dashboard 返回 HTTP {status}: {text}"));
-    }
+    let text = response.text().await.unwrap_or_default();
+    let summary = summarize_dashboard_error(&text);
+
+    return Err(format!(
+        "OpenCode Go dashboard 返回 HTTP {status}: {summary}"
+    ));
+}
 
     response
         .text()
@@ -300,10 +299,7 @@ fn parse_dashboard_usage(html: &str) -> Result<DashboardUsage, String> {
     let monthly = parse_window("monthlyUsage", &text, &now);
 
     if rolling.is_none() && weekly.is_none() && monthly.is_none() {
-        return Err(
-            "未在 OpenCode Go dashboard HTML 中找到 rollingUsage / weeklyUsage / monthlyUsage"
-                .to_string(),
-        );
+        return Err("未在 OpenCode Go dashboard HTML 中找到 rollingUsage / weeklyUsage / monthlyUsage".to_string());
     }
 
     Ok(DashboardUsage {
@@ -313,11 +309,7 @@ fn parse_dashboard_usage(html: &str) -> Result<DashboardUsage, String> {
     })
 }
 
-fn parse_window(
-    field_name: &str,
-    text: &str,
-    now: &DateTime<Utc>,
-) -> Option<OpenCodeGoUsageWindow> {
+fn parse_window(field_name: &str, text: &str, now: &DateTime<Utc>) -> Option<OpenCodeGoUsageWindow> {
     let object_pattern = format!(
         r#"["']?{}["']?\s*:\s*(?:\$R\[\d+\]\s*=\s*)?\{{(?P<body>[^{{}}]*)\}}"#,
         regex::escape(field_name)
@@ -331,7 +323,7 @@ fn parse_window(
     let reset_in_seconds = capture_number("resetInSec", body)?.round() as i64;
     let reset_in_seconds = reset_in_seconds.max(0);
 
-    let reset_at = now.clone() + Duration::seconds(reset_in_seconds);
+    let reset_at = now.to_owned() + Duration::seconds(reset_in_seconds);
 
     Some(OpenCodeGoUsageWindow {
         usage_percent,
@@ -386,4 +378,47 @@ fn format_duration(seconds: i64) -> String {
     } else {
         format!("{minutes}m")
     }
+}
+
+fn summarize_dashboard_error(html: &str) -> String {
+    let normalized = normalize_dashboard_html(html);
+    let plain = strip_html_tags(&normalized);
+    let compact = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    if compact.contains("ResourceExhausted")
+        || compact.contains("connection limit exceeded")
+        || compact.contains("transaction pool")
+    {
+        return "OpenCode 服务端数据库连接池已满，稍后重试；本地配置通常没问题".to_string();
+    }
+
+    if compact.contains("Unauthorized") || compact.contains("401") {
+        return "认证失败，请重新复制 opencode.ai 的 auth cookie".to_string();
+    }
+
+    if compact.contains("Forbidden") || compact.contains("403") {
+        return "无权限访问该 workspace，请检查 workspaceId 和 authCookie 是否匹配".to_string();
+    }
+
+    if compact.trim().is_empty() {
+        return "返回了空错误页".to_string();
+    }
+
+    truncate_chars(&compact, 220)
+}
+
+fn strip_html_tags(text: &str) -> String {
+    Regex::new(r"<[^>]+>")
+        .map(|re| re.replace_all(text, " ").to_string())
+        .unwrap_or_else(|_| text.to_string())
+}
+
+fn truncate_chars(text: &str, max_chars: usize) -> String {
+    let mut result = text.chars().take(max_chars).collect::<String>();
+
+    if text.chars().count() > max_chars {
+        result.push_str("...");
+    }
+
+    result
 }
