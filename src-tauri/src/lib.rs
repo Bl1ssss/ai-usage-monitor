@@ -1,3 +1,4 @@
+mod opencode_go;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -83,7 +84,7 @@ async fn deepseek_balance(api_key: String) -> Result<DeepSeekMetric, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![deepseek_balance])
+        .invoke_handler(tauri::generate_handler![deepseek_balance,opencode_go::opencode_go_usage])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

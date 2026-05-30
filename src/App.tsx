@@ -21,7 +21,22 @@ type DeepSeekMetric = {
   updatedAt: string;
 };
 
-
+type OpenCodeGoMetric = {
+  provider: string;
+  status: "ok" | "warning" | "error";
+  fiveHourUsage: number | null;
+  fiveHourResetIn: string | null;
+  fiveHourResetAt: string | null;
+  weeklyUsage: number | null;
+  weeklyResetIn: string | null;
+  weeklyResetAt: string | null;
+  monthlyUsage: number | null;
+  monthlyResetIn: string | null;
+  monthlyResetAt: string | null;
+  modelCount: number | null;
+  configSource: string;
+  updatedAt: string;
+};
 
 function UsageCard({ title, main, sub, percent, error, warning }: UsageCardProps) {
   return (
@@ -58,13 +73,27 @@ function formatTime(value?: string) {
   });
 }
 
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) return "--";
+  return `${value.toFixed(1)}%`;
+}
+
+function clampPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) return undefined;
+  return Math.max(0, Math.min(100, value));
+}
+
 export default function App() {
   const [deepseek, setDeepseek] = useState<DeepSeekMetric | null>(null);
   const [deepseekError, setDeepseekError] = useState("");
+
+  const [opencodeGo, setOpencodeGo] = useState<OpenCodeGoMetric | null>(null);
+  const [opencodeGoError, setOpencodeGoError] = useState("");
+
   const [lastUpdated, setLastUpdated] = useState("");
- const [refreshStatus, setRefreshStatus] = useState<"idle" | "refreshing" | "ok" | "failed">("idle");
- const [showSettings, setShowSettings] = useState(false);
-const [deepseekApiKey, setDeepseekApiKey] = useState(
+  const [refreshStatus, setRefreshStatus] = useState<"idle" | "refreshing" | "ok" | "failed">("idle");
+  const [showSettings, setShowSettings] = useState(false);
+  const [deepseekApiKey, setDeepseekApiKey] = useState(
   localStorage.getItem("deepseekApiKey") ?? ""
 );
 const [lowBalanceThreshold, setLowBalanceThreshold] = useState(
@@ -73,43 +102,85 @@ const [lowBalanceThreshold, setLowBalanceThreshold] = useState(
 const [refreshIntervalMinutes, setRefreshIntervalMinutes] = useState(
   Number(localStorage.getItem("refreshIntervalMinutes") ?? "5")
 );
-  async function refreshDeepSeek() {
+
+const [opencodeGoConfigPath, setOpencodeGoConfigPath] = useState(
+  localStorage.getItem("opencodeGoConfigPath") ?? ""
+);
+
+const [opencodeGoWarningThreshold, setOpencodeGoWarningThreshold] = useState(
+  Number(localStorage.getItem("opencodeGoWarningThreshold") ?? "80")
+);
+
+
+async function refreshDeepSeek() {
   try {
-    setRefreshStatus("refreshing");
     setDeepseekError("");
 
     const data = await invoke<DeepSeekMetric>("deepseek_balance", {
-  apiKey: deepseekApiKey,
-});
+      apiKey: deepseekApiKey,
+    });
 
     setDeepseek(data);
-    setLastUpdated(data.updatedAt);
-    setRefreshStatus("ok");
+    return true;
   } catch (error) {
     setDeepseekError(String(error));
-    setRefreshStatus("failed");
+    return false;
   }
+}
+
+async function refreshOpenCodeGo() {
+  try {
+    setOpencodeGoError("");
+
+    const configPath = opencodeGoConfigPath.trim()
+      ? opencodeGoConfigPath.trim()
+      : null;
+
+    const data = await invoke<OpenCodeGoMetric>("opencode_go_usage", {
+      configPath,
+    });
+
+    setOpencodeGo(data);
+    return true;
+  } catch (error) {
+    setOpencodeGoError(String(error));
+    return false;
+  }
+}
+
+async function refreshAll() {
+  setRefreshStatus("refreshing");
+
+  const [deepseekOk, opencodeOk] = await Promise.all([
+    refreshDeepSeek(),
+    refreshOpenCodeGo(),
+  ]);
+
+  setLastUpdated(new Date().toISOString());
+  setRefreshStatus(deepseekOk && opencodeOk ? "ok" : "failed");
 }
 
 function saveSettings() {
   localStorage.setItem("deepseekApiKey", deepseekApiKey);
   localStorage.setItem("lowBalanceThreshold", String(lowBalanceThreshold));
   localStorage.setItem("refreshIntervalMinutes", String(refreshIntervalMinutes));
+  localStorage.setItem("opencodeGoConfigPath", opencodeGoConfigPath);
+  localStorage.setItem("opencodeGoWarningThreshold", String(opencodeGoWarningThreshold));
 
   setShowSettings(false);
-  refreshDeepSeek();
+  refreshAll();
 }
 
 
   useEffect(() => {
-  refreshDeepSeek();
+  refreshAll();
 
   const timer = window.setInterval(() => {
-    refreshDeepSeek();
+    refreshAll();
   }, refreshIntervalMinutes * 60 * 1000);
 
   return () => window.clearInterval(timer);
-}, [refreshIntervalMinutes, deepseekApiKey]);
+}, [refreshIntervalMinutes, deepseekApiKey, opencodeGoConfigPath]);
 
   return (
     <main className="dashboard">
@@ -157,11 +228,35 @@ function saveSettings() {
         />
 
         <UsageCard
-          title="OPENCODE GO"
-          main="61%"
-          sub="weekly usage"
-          percent={61}
-        />
+  title="OPENCODE GO"
+  main={
+    opencodeGo
+      ? `5h ${formatPercent(opencodeGo.fiveHourUsage)}`
+      : "--"
+  }
+  sub={
+    opencodeGo
+      ? `W ${formatPercent(opencodeGo.weeklyUsage)} / M ${formatPercent(
+          opencodeGo.monthlyUsage
+        )} / reset ${opencodeGo.fiveHourResetIn ?? "--"}`
+      : "loading..."
+  }
+  percent={clampPercent(opencodeGo?.fiveHourUsage)}
+  error={opencodeGoError}
+  warning={Boolean(
+    opencodeGo &&
+      [
+        opencodeGo.fiveHourUsage,
+        opencodeGo.weeklyUsage,
+        opencodeGo.monthlyUsage,
+      ].some(
+        (value) =>
+          value !== null &&
+          value !== undefined &&
+          value >= opencodeGoWarningThreshold
+      )
+  )}
+/>
       </section>
 
       <footer className="footer">
@@ -169,7 +264,7 @@ function saveSettings() {
   <span>{refreshStatus}</span>
 
   <div className="footer-actions">
-    <button className="refresh-button" onClick={refreshDeepSeek}>
+    <button className="refresh-button" onClick={refreshAll}>
       refresh
     </button>
 
@@ -220,6 +315,33 @@ function saveSettings() {
         onChange={(event) => setRefreshIntervalMinutes(Number(event.target.value))}
       />
     </label>
+
+<div className="settings-section-title">OPENCODE GO</div>
+
+<label className="settings-label">
+  Config file path
+  <input
+    className="settings-input"
+    value={opencodeGoConfigPath}
+    onChange={(event) => setOpencodeGoConfigPath(event.target.value)}
+    placeholder="%APPDATA%\\ai-usage-monitor\\opencode-go.json"
+  />
+</label>
+
+<label className="settings-label">
+  Warning threshold percent
+  <input
+    className="settings-input"
+    type="number"
+    min="1"
+    max="100"
+    value={opencodeGoWarningThreshold}
+    onChange={(event) =>
+      setOpencodeGoWarningThreshold(Number(event.target.value))
+    }
+  />
+</label>
+
 
     <button className="settings-save" onClick={saveSettings}>
       SAVE SETTINGS
