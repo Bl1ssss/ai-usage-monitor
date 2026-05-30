@@ -1,4 +1,5 @@
 mod cache;
+mod codex;
 mod deepseek;
 mod opencode_go;
 
@@ -9,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             deepseek::deepseek_balance,
             opencode_go::opencode_go_usage,
+            codex::codex_usage,
             cache::load_cache,
             cache::save_cache
         ])

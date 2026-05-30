@@ -98,6 +98,61 @@ export function SettingsPanel({
         />
       </label>
 
+<div className="settings-section-title">CODEX</div>
+
+<label className="settings-label">
+  Auth file path
+  <input
+    className="settings-input"
+    value={settings.codexAuthPath}
+    onChange={(event) =>
+      onChange({ ...settings, codexAuthPath: event.target.value })
+    }
+    placeholder="%USERPROFILE%\\.codex\\auth.json"
+  />
+</label>
+
+<label className="settings-label">
+  Base URL
+  <input
+    className="settings-input"
+    value={settings.codexBaseUrl}
+    onChange={(event) =>
+      onChange({ ...settings, codexBaseUrl: event.target.value })
+    }
+    placeholder="https://chatgpt.com"
+  />
+</label>
+
+<label className="settings-label">
+  Proxy URL
+  <input
+    className="settings-input"
+    value={settings.codexProxyUrl}
+    onChange={(event) =>
+      onChange({ ...settings, codexProxyUrl: event.target.value })
+    }
+    placeholder="http://127.0.0.1:7890"
+  />
+</label>
+
+<label className="settings-label">
+  Warning threshold percent
+  <input
+    className="settings-input"
+    type="number"
+    min="1"
+    max="100"
+    value={settings.codexWarningThreshold}
+    onChange={(event) =>
+      onChange({
+        ...settings,
+        codexWarningThreshold: Number(event.target.value),
+      })
+    }
+  />
+</label>
+
       <button className="settings-save" onClick={onSave}>
         SAVE SETTINGS
       </button>

@@ -5,9 +5,12 @@ import { UsageCard } from "./components/UsageCard";
 import { loadCache, saveCache } from "./providers/cache";
 import { fetchDeepSeek } from "./providers/deepseek";
 import { fetchOpenCodeGo } from "./providers/opencodeGo";
-import type { DeepSeekMetric, OpenCodeGoMetric } from "./types/metrics";
+import type {CodexMetric,DeepSeekMetric,OpenCodeGoMetric,} from "./types/metrics";
 import { loadSettings, saveSettings as persistSettings } from "./types/settings";
-import { clampPercent, formatCurrency, formatPercent, formatTime } from "./utils/format";
+import {clampPercent,formatCurrency,formatPercent,formatTime,formatWindowMinutes,} from "./utils/format";
+import { fetchCodex } from "./providers/codex";
+
+
 
 export default function App() {
   const [settings, setSettings] = useState(loadSettings);
@@ -17,6 +20,9 @@ export default function App() {
 
   const [opencodeGo, setOpencodeGo] = useState<OpenCodeGoMetric | null>(null);
   const [opencodeGoError, setOpencodeGoError] = useState("");
+
+  const [codex, setCodex] = useState<CodexMetric | null>(null);
+  const [codexError, setCodexError] = useState("");
 
   const [lastUpdated, setLastUpdated] = useState("");
   const [refreshStatus, setRefreshStatus] = useState<
@@ -29,13 +35,15 @@ export default function App() {
 
     const nextUpdatedAt = new Date().toISOString();
 
-    const [deepseekResult, opencodeResult] = await Promise.allSettled([
+    const [deepseekResult, opencodeResult, codexResult] = await Promise.allSettled([
       fetchDeepSeek(settings.deepseekApiKey),
       fetchOpenCodeGo(settings.opencodeGoConfigPath),
+      fetchCodex(settings.codexAuthPath,settings.codexBaseUrl,settings.codexProxyUrl),
     ]);
 
     let nextDeepseek = deepseek;
     let nextOpenCodeGo = opencodeGo;
+    let nextCodex = codex;
 
     if (deepseekResult.status === "fulfilled") {
       nextDeepseek = deepseekResult.value;
@@ -53,17 +61,27 @@ export default function App() {
       setOpencodeGoError(String(opencodeResult.reason));
     }
 
+    if (codexResult.status === "fulfilled") {
+      nextCodex = codexResult.value;
+      setCodex(nextCodex);
+      setCodexError("");
+    } else {
+      setCodexError(String(codexResult.reason));
+    }
+
     setLastUpdated(nextUpdatedAt);
 
     await saveCache({
       deepseek: nextDeepseek,
       opencodeGo: nextOpenCodeGo,
+      codex: nextCodex,
       updatedAt: nextUpdatedAt,
     });
 
     const ok =
       deepseekResult.status === "fulfilled" &&
-      opencodeResult.status === "fulfilled";
+      opencodeResult.status === "fulfilled" &&
+      codexResult.status === "fulfilled";
 
     setRefreshStatus(ok ? "ok" : "stale");
   }
@@ -81,6 +99,7 @@ export default function App() {
       .then((cache) => {
         if (cache.deepseek) setDeepseek(cache.deepseek);
         if (cache.opencodeGo) setOpencodeGo(cache.opencodeGo);
+        if (cache.codex) setCodex(cache.codex);
         if (cache.updatedAt) setLastUpdated(cache.updatedAt);
       })
       .catch(() => {
@@ -104,6 +123,9 @@ export default function App() {
     settings.refreshIntervalMinutes,
     settings.deepseekApiKey,
     settings.opencodeGoConfigPath,
+    settings.codexAuthPath,
+    settings.codexBaseUrl,
+    settings.codexProxyUrl,
   ]);
 
   const deepseekWarning = Boolean(
@@ -155,7 +177,37 @@ export default function App() {
           warning={deepseekWarning}
         />
 
-        <UsageCard title="CODEX" main="87%" sub="reset in 0h43m" percent={87} />
+        <UsageCard
+  title={codex?.planType ? `CODEX ${codex.planType}` : "CODEX"}
+  main={
+    codex
+      ? `${formatWindowMinutes(codex.primaryWindowMinutes)} ${formatPercent(
+          codex.primaryUsage
+        )}`
+      : "--"
+  }
+  sub={
+    codex
+      ? `S ${formatPercent(codex.secondaryUsage)} / reset ${
+          codex.primaryResetIn ?? "--"
+        }${codexError ? " / stale" : ""}`
+      : "loading..."
+  }
+  percent={clampPercent(codex?.primaryUsage)}
+  error={!codex ? codexError : ""}
+  warning={Boolean(
+    codex &&
+      [
+        codex.primaryUsage,
+        codex.secondaryUsage,
+      ].some(
+        (value) =>
+          value !== null &&
+          value !== undefined &&
+          value >= settings.codexWarningThreshold
+      )
+  )}
+/>
 
         <UsageCard
           title="CURSOR"

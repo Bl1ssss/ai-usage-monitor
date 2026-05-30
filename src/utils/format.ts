@@ -26,3 +26,21 @@ export function clampPercent(value: number | null | undefined) {
   if (value === null || value === undefined) return undefined;
   return Math.max(0, Math.min(100, value));
 }
+
+export function formatWindowMinutes(value: number | null | undefined) {
+  if (value === null || value === undefined) return "--";
+
+  if (value % 10080 === 0) {
+    return `${value / 10080}w`;
+  }
+
+  if (value % 1440 === 0) {
+    return `${value / 1440}d`;
+  }
+
+  if (value % 60 === 0) {
+    return `${value / 60}h`;
+  }
+
+  return `${value}m`;
+}

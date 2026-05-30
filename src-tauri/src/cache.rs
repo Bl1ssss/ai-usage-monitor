@@ -7,6 +7,7 @@ use std::{env, fs, path::PathBuf};
 pub struct AppCache {
     pub deepseek: Option<Value>,
     pub opencode_go: Option<Value>,
+    pub codex: Option<Value>,
     pub updated_at: Option<String>,
 }
 
@@ -18,6 +19,7 @@ pub fn load_cache() -> Result<AppCache, String> {
         return Ok(AppCache {
             deepseek: None,
             opencode_go: None,
+            codex: None,
             updated_at: None,
         });
     }

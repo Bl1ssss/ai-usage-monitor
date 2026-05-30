@@ -27,8 +27,34 @@ export type OpenCodeGoMetric = {
   updatedAt: string;
 };
 
+export type CodexMetric = {
+  provider: "codex";
+  status: ProviderStatus;
+
+  planType: string | null;
+
+  primaryUsage: number | null;
+  primaryWindowMinutes: number | null;
+  primaryResetAt: string | null;
+  primaryResetIn: string | null;
+
+  secondaryUsage: number | null;
+  secondaryWindowMinutes: number | null;
+  secondaryResetAt: string | null;
+  secondaryResetIn: string | null;
+
+  creditsBalance: string | null;
+  unlimitedCredits: boolean | null;
+  rateLimitReachedType: string | null;
+
+  authSource: string;
+  baseUrl: string;
+  updatedAt: string;
+};
+
 export type AppCache = {
   deepseek: DeepSeekMetric | null;
   opencodeGo: OpenCodeGoMetric | null;
+  codex: CodexMetric | null;
   updatedAt: string | null;
 };
