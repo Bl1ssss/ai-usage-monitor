@@ -58,3 +58,24 @@ export type AppCache = {
   codex: CodexMetric | null;
   updatedAt: string | null;
 };
+
+export type ProviderId = "deepseek" | "codex" | "cursor" | "opencode_go";
+
+export type ProviderSnapshotStatus =
+  | "ok"
+  | "warning"
+  | "error"
+  | "stale"
+  | "loading"
+  | "mock";
+
+export type ProviderSnapshot = {
+  id: ProviderId;
+  title: string;
+  main: string;
+  sub: string;
+  percent?: number;
+  status: ProviderSnapshotStatus;
+  error?: string;
+  updatedAt?: string;
+};

@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { UsageCard } from "./components/UsageCard";
 import { loadCache, saveCache } from "./providers/cache";
+import { fetchCodex } from "./providers/codex";
 import { fetchDeepSeek } from "./providers/deepseek";
 import { fetchOpenCodeGo } from "./providers/opencodeGo";
-import type {CodexMetric,DeepSeekMetric,OpenCodeGoMetric,} from "./types/metrics";
+import {
+  createProviderSnapshots,
+  summarizeProviderStatus,
+} from "./providers/snapshots";
+import type { CodexMetric, DeepSeekMetric, OpenCodeGoMetric } from "./types/metrics";
 import { loadSettings, saveSettings as persistSettings } from "./types/settings";
-import {clampPercent,formatCurrency,formatPercent,formatTime,formatWindowMinutes,} from "./utils/format";
-import { fetchCodex } from "./providers/codex";
-
-
+import { formatTime } from "./utils/format";
 
 export default function App() {
   const [settings, setSettings] = useState(loadSettings);
@@ -38,7 +40,7 @@ export default function App() {
     const [deepseekResult, opencodeResult, codexResult] = await Promise.allSettled([
       fetchDeepSeek(settings.deepseekApiKey),
       fetchOpenCodeGo(settings.opencodeGoConfigPath),
-      fetchCodex(settings.codexAuthPath,settings.codexBaseUrl,settings.codexProxyUrl),
+      fetchCodex(settings.codexAuthPath, settings.codexBaseUrl, settings.codexProxyUrl),
     ]);
 
     let nextDeepseek = deepseek;
@@ -128,30 +130,28 @@ export default function App() {
     settings.codexProxyUrl,
   ]);
 
-  const deepseekWarning = Boolean(
-    deepseek && deepseek.totalBalance < settings.lowBalanceThreshold,
+  const snapshots = useMemo(
+    () =>
+      createProviderSnapshots({
+        settings,
+        deepseek,
+        deepseekError,
+        opencodeGo,
+        opencodeGoError,
+        codex,
+        codexError,
+      }),
+    [settings, deepseek, deepseekError, opencodeGo, opencodeGoError, codex, codexError],
   );
 
-  const opencodeWarning = Boolean(
-    opencodeGo &&
-      [
-        opencodeGo.fiveHourUsage,
-        opencodeGo.weeklyUsage,
-        opencodeGo.monthlyUsage,
-      ].some(
-        (value) =>
-          value !== null &&
-          value !== undefined &&
-          value >= settings.opencodeGoWarningThreshold,
-      ),
-  );
+  const providerSummary = summarizeProviderStatus(snapshots);
 
   return (
     <main className="dashboard">
       <header className="topbar">
         <div>
           <div className="app-title">AI USAGE MONITOR</div>
-          <div className="app-subtitle">Windows Desktop Widget</div>
+          <div className="app-subtitle">Windows Desktop Widget · {providerSummary}</div>
         </div>
 
         <div className="weather">
@@ -163,87 +163,9 @@ export default function App() {
       <div className="divider" />
 
       <section className="grid">
-        <UsageCard
-          title="DEEPSEEK"
-          main={deepseek ? formatCurrency(deepseek.currency, deepseek.totalBalance) : "--"}
-          sub={
-            deepseek
-              ? deepseekWarning
-                ? `LOW BALANCE / topup ${deepseek.toppedUpBalance.toFixed(2)}`
-                : `grant ${deepseek.grantedBalance.toFixed(2)} / topup ${deepseek.toppedUpBalance.toFixed(2)}`
-              : "loading..."
-          }
-          error={deepseekError}
-          warning={deepseekWarning}
-        />
-
-        <UsageCard
-  title={codex?.planType ? `CODEX ${codex.planType}` : "CODEX"}
-  main={
-    codex
-      ? `${formatWindowMinutes(codex.primaryWindowMinutes)} ${formatPercent(
-          codex.primaryUsage
-        )}`
-      : "--"
-  }
-  sub={
-    codex
-      ? `S ${formatPercent(codex.secondaryUsage)} / reset ${
-          codex.primaryResetIn ?? "--"
-        }${codexError ? " / stale" : ""}`
-      : "loading..."
-  }
-  percent={clampPercent(codex?.primaryUsage)}
-  error={!codex ? codexError : ""}
-  warning={Boolean(
-    codex &&
-      [
-        codex.primaryUsage,
-        codex.secondaryUsage,
-      ].some(
-        (value) =>
-          value !== null &&
-          value !== undefined &&
-          value >= settings.codexWarningThreshold
-      )
-  )}
-/>
-
-        <UsageCard
-          title="CURSOR"
-          main="20%"
-          sub="Auto 26.6% / API 0.0%"
-          percent={20}
-        />
-
-        <UsageCard
-  title="OPENCODE GO"
-  main={opencodeGo ? `5h ${formatPercent(opencodeGo.fiveHourUsage)}` : "--"}
-  sub={
-    opencodeGo
-      ? `W ${formatPercent(opencodeGo.weeklyUsage)} / M ${formatPercent(
-          opencodeGo.monthlyUsage
-        )} / reset ${opencodeGo.fiveHourResetIn ?? "--"}${
-          opencodeGoError ? " / stale" : ""
-        }`
-      : "loading..."
-  }
-  percent={clampPercent(opencodeGo?.fiveHourUsage)}
-  error={!opencodeGo ? opencodeGoError : ""}
-  warning={Boolean(
-    opencodeGo &&
-      [
-        opencodeGo.fiveHourUsage,
-        opencodeGo.weeklyUsage,
-        opencodeGo.monthlyUsage,
-      ].some(
-        (value) =>
-          value !== null &&
-          value !== undefined &&
-          value >= settings.opencodeGoWarningThreshold
-      )
-  )}
-/>
+        {snapshots.map((snapshot) => (
+          <UsageCard key={snapshot.id} snapshot={snapshot} />
+        ))}
       </section>
 
       <footer className="footer">
