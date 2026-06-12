@@ -20,13 +20,13 @@ export function loadSettings(): AppSettings {
 
     opencodeGoConfigPath: localStorage.getItem("opencodeGoConfigPath") ?? "",
     opencodeGoWarningThreshold: Number(
-      localStorage.getItem("opencodeGoWarningThreshold") ?? "80"
+      localStorage.getItem("opencodeGoWarningThreshold") ?? "80",
     ),
 
     codexAuthPath: localStorage.getItem("codexAuthPath") ?? "",
     codexBaseUrl: localStorage.getItem("codexBaseUrl") ?? "https://chatgpt.com",
+    codexProxyUrl: localStorage.getItem("codexProxyUrl") ?? "",
     codexWarningThreshold: Number(localStorage.getItem("codexWarningThreshold") ?? "80"),
-    codexProxyUrl:localStorage.getItem("codexProxyUrl") ?? "http://127.0.0.1:7890",
   };
 }
 
@@ -38,7 +38,7 @@ export function saveSettings(settings: AppSettings) {
   localStorage.setItem("opencodeGoConfigPath", settings.opencodeGoConfigPath);
   localStorage.setItem(
     "opencodeGoWarningThreshold",
-    String(settings.opencodeGoWarningThreshold)
+    String(settings.opencodeGoWarningThreshold),
   );
 
   localStorage.setItem("codexAuthPath", settings.codexAuthPath);

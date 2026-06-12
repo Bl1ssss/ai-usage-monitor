@@ -3,6 +3,6 @@ import type { DeepSeekMetric } from "../types/metrics";
 
 export async function fetchDeepSeek(apiKey: string) {
   return invoke<DeepSeekMetric>("deepseek_balance", {
-    apiKey,
+    apiKey: apiKey.trim() ? apiKey.trim() : null,
   });
 }

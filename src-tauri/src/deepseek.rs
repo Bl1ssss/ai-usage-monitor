@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::env;
 
 #[derive(Debug, Deserialize)]
 struct DeepSeekBalanceResponse {
@@ -31,10 +32,21 @@ fn parse_balance(value: &str) -> f64 {
 }
 
 #[tauri::command]
-pub async fn deepseek_balance(api_key: String) -> Result<DeepSeekMetric, String> {
-    if api_key.trim().is_empty() {
-        return Err("未设置 DeepSeek API Key".to_string());
-    }
+pub async fn deepseek_balance(api_key: Option<String>) -> Result<DeepSeekMetric, String> {
+    let api_key = api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            env::var("DEEPSEEK_API_KEY")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .ok_or_else(|| {
+            "未设置 DeepSeek API Key，也未发现 DEEPSEEK_API_KEY 环境变量".to_string()
+        })?;
 
     let client = reqwest::Client::new();
 
