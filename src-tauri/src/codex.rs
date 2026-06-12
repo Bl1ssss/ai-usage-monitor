@@ -282,42 +282,6 @@ fn parse_codex_metric(
     })
 }
 
-fn find_snapshot(value: &Value) -> &Value {
-    for key in [
-        "rateLimitSnapshot",
-        "rate_limit_snapshot",
-        "usage",
-        "rateLimits",
-        "rate_limits",
-        "snapshot",
-    ] {
-        if let Some(item) = value.get(key) {
-            if item.is_object() {
-                return item;
-            }
-        }
-    }
-
-    if let Some(data) = value.get("data") {
-        if data.is_object() {
-            return find_snapshot(data);
-        }
-
-        if let Some(array) = data.as_array() {
-            if let Some(first) = array.first() {
-                return find_snapshot(first);
-            }
-        }
-    }
-
-    if let Some(array) = value.as_array() {
-        if let Some(first) = array.first() {
-            return find_snapshot(first);
-        }
-    }
-
-    value
-}
 
 fn parse_window(value: Option<&Value>) -> CodexWindow {
     let Some(value) = value else {
