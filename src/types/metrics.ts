@@ -69,12 +69,21 @@ export type ProviderSnapshotStatus =
   | "loading"
   | "mock";
 
+export type UsageProgressSnapshot = {
+  id: string;
+  label: string;
+  percent: number;
+  valueText: string;
+  resetText?: string;
+};
+
 export type ProviderSnapshot = {
   id: ProviderId;
   title: string;
-  main: string;
-  sub: string;
-  percent?: number;
+  main?: string;
+  mainLabel?: string;
+  subtitle?: string;
+  rows: UsageProgressSnapshot[];
   status: ProviderSnapshotStatus;
   error?: string;
   updatedAt?: string;

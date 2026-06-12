@@ -3,17 +3,26 @@ mod codex;
 mod deepseek;
 mod discovery;
 mod opencode_go;
+mod tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_positioner::init())
+        .setup(|app| {
+            #[cfg(desktop)]
+            tray::setup_tray(app)?;
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             deepseek::deepseek_balance,
             opencode_go::opencode_go_usage,
             codex::codex_usage,
             discovery::discover_local_sources,
+            tray::hide_to_tray,
             cache::load_cache,
             cache::save_cache
         ])

@@ -4,6 +4,7 @@ import type {
   OpenCodeGoMetric,
   ProviderSnapshot,
   ProviderSnapshotStatus,
+  UsageProgressSnapshot,
 } from "../types/metrics";
 import type { AppSettings } from "../types/settings";
 import {
@@ -27,24 +28,23 @@ export function createProviderSnapshots(input: SnapshotInput): ProviderSnapshot[
   return [
     createDeepSeekSnapshot(input),
     createCodexSnapshot(input),
-    createCursorSnapshot(),
     createOpenCodeGoSnapshot(input),
+    createCursorSnapshot(),
   ];
 }
 
 export function summarizeProviderStatus(snapshots: ProviderSnapshot[]) {
-  const errors = snapshots.filter((item) => item.status === "error").length;
-  const stale = snapshots.filter((item) => item.status === "stale").length;
-  const warnings = snapshots.filter((item) => item.status === "warning").length;
-  const loading = snapshots.filter((item) => item.status === "loading").length;
-  const mock = snapshots.filter((item) => item.status === "mock").length;
+  const active = snapshots.filter((item) => item.status !== "mock");
+  const errors = active.filter((item) => item.status === "error").length;
+  const stale = active.filter((item) => item.status === "stale").length;
+  const warnings = active.filter((item) => item.status === "warning").length;
+  const loading = active.filter((item) => item.status === "loading").length;
 
-  if (errors > 0) return `${errors} error${errors > 1 ? "s" : ""}`;
-  if (loading > 0) return `${loading} loading`;
-  if (stale > 0) return `${stale} stale`;
-  if (warnings > 0) return `${warnings} warning${warnings > 1 ? "s" : ""}`;
-  if (mock > 0) return `ok · ${mock} mock`;
-  return "all ok";
+  if (errors > 0) return `${active.length} ACTIVE · ${errors} ERROR`;
+  if (loading > 0) return `${active.length} ACTIVE · ${loading} SYNCING`;
+  if (stale > 0) return `${active.length} ACTIVE · ${stale} STALE`;
+  if (warnings > 0) return `${active.length} ACTIVE · ${warnings} WARNING`;
+  return `${active.length} ACTIVE · ALL OK`;
 }
 
 function createDeepSeekSnapshot({
@@ -57,21 +57,33 @@ function createDeepSeekSnapshot({
   );
   const status = resolveSnapshotStatus(deepseek, deepseekError, warning);
 
+  if (!deepseek) {
+    return {
+      id: "deepseek",
+      title: "DEEPSEEK",
+      main: deepseekError ? "UNAVAILABLE" : "SYNCING",
+      mainLabel: "AVAILABLE BALANCE",
+      subtitle: deepseekError ? "Open settings to verify the API key" : "Reading account balance...",
+      rows: [],
+      status,
+      error: normalizeError(deepseekError),
+    };
+  }
+
   return {
     id: "deepseek",
     title: "DEEPSEEK",
-    main: deepseek ? formatCurrency(deepseek.currency, deepseek.totalBalance) : "--",
-    sub: deepseek
-      ? withStaleSuffix(
-          warning
-            ? `LOW BALANCE / topup ${deepseek.toppedUpBalance.toFixed(2)}`
-            : `grant ${deepseek.grantedBalance.toFixed(2)} / topup ${deepseek.toppedUpBalance.toFixed(2)}`,
-          deepseekError,
-        )
-      : "loading...",
+    main: formatCurrency(deepseek.currency, deepseek.totalBalance),
+    mainLabel: "AVAILABLE BALANCE",
+    subtitle: withStaleSuffix(
+      warning
+        ? `LOW BALANCE · TOP-UP ${deepseek.toppedUpBalance.toFixed(2)}`
+        : `GRANT ${deepseek.grantedBalance.toFixed(2)} · TOP-UP ${deepseek.toppedUpBalance.toFixed(2)}`,
+      deepseekError,
+    ),
+    rows: [],
     status,
-    error: deepseek ? undefined : normalizeError(deepseekError),
-    updatedAt: deepseek?.updatedAt,
+    updatedAt: deepseek.updatedAt,
   };
 }
 
@@ -88,22 +100,47 @@ function createCodexSnapshot({
   );
   const status = resolveSnapshotStatus(codex, codexError, warning);
 
+  if (!codex) {
+    return {
+      id: "codex",
+      title: "CODEX",
+      main: codexError ? "UNAVAILABLE" : "SYNCING",
+      mainLabel: "RATE LIMITS",
+      subtitle: codexError ? "Check auth.json and proxy settings" : "Reading usage windows...",
+      rows: [],
+      status,
+      error: normalizeError(codexError),
+    };
+  }
+
+  const rows: UsageProgressSnapshot[] = [
+    createUsageRow(
+      "primary",
+      formatWindowMinutes(codex.primaryWindowMinutes),
+      codex.primaryUsage,
+      codex.primaryResetIn,
+    ),
+    createUsageRow(
+      "secondary",
+      formatWindowMinutes(codex.secondaryWindowMinutes),
+      codex.secondaryUsage,
+      codex.secondaryResetIn,
+    ),
+  ];
+
+  const creditsText = codex.unlimitedCredits
+    ? "UNLIMITED CREDITS"
+    : codex.creditsBalance
+      ? `CREDITS ${codex.creditsBalance}`
+      : "PRIMARY + SECONDARY WINDOWS";
+
   return {
     id: "codex",
-    title: codex?.planType ? `CODEX ${codex.planType}` : "CODEX",
-    main: codex
-      ? `${formatWindowMinutes(codex.primaryWindowMinutes)} ${formatPercent(codex.primaryUsage)}`
-      : "--",
-    sub: codex
-      ? withStaleSuffix(
-          `S ${formatPercent(codex.secondaryUsage)} / reset ${codex.primaryResetIn ?? "--"}`,
-          codexError,
-        )
-      : "loading...",
-    percent: clampPercent(codex?.primaryUsage),
+    title: codex.planType ? `CODEX ${codex.planType.toUpperCase()}` : "CODEX",
+    subtitle: withStaleSuffix(creditsText, codexError),
+    rows,
     status,
-    error: codex ? undefined : normalizeError(codexError),
-    updatedAt: codex?.updatedAt,
+    updatedAt: codex.updatedAt,
   };
 }
 
@@ -123,22 +160,30 @@ function createOpenCodeGoSnapshot({
   );
   const status = resolveSnapshotStatus(opencodeGo, opencodeGoError, warning);
 
+  if (!opencodeGo) {
+    return {
+      id: "opencode_go",
+      title: "OPENCODE GO",
+      main: opencodeGoError ? "UNAVAILABLE" : "SYNCING",
+      mainLabel: "PLAN USAGE",
+      subtitle: opencodeGoError ? "Check workspace and cookie configuration" : "Reading dashboard usage...",
+      rows: [],
+      status,
+      error: normalizeError(opencodeGoError),
+    };
+  }
+
   return {
     id: "opencode_go",
     title: "OPENCODE GO",
-    main: opencodeGo ? `5h ${formatPercent(opencodeGo.fiveHourUsage)}` : "--",
-    sub: opencodeGo
-      ? withStaleSuffix(
-          `W ${formatPercent(opencodeGo.weeklyUsage)} / M ${formatPercent(
-            opencodeGo.monthlyUsage,
-          )} / reset ${opencodeGo.fiveHourResetIn ?? "--"}`,
-          opencodeGoError,
-        )
-      : "loading...",
-    percent: clampPercent(opencodeGo?.fiveHourUsage),
+    subtitle: withStaleSuffix("ROLLING USAGE WINDOWS", opencodeGoError),
+    rows: [
+      createUsageRow("rolling", "5H", opencodeGo.fiveHourUsage, opencodeGo.fiveHourResetIn),
+      createUsageRow("weekly", "WEEK", opencodeGo.weeklyUsage, opencodeGo.weeklyResetIn),
+      createUsageRow("monthly", "MONTH", opencodeGo.monthlyUsage, opencodeGo.monthlyResetIn),
+    ],
     status,
-    error: opencodeGo ? undefined : normalizeError(opencodeGoError),
-    updatedAt: opencodeGo?.updatedAt,
+    updatedAt: opencodeGo.updatedAt,
   };
 }
 
@@ -146,10 +191,26 @@ function createCursorSnapshot(): ProviderSnapshot {
   return {
     id: "cursor",
     title: "CURSOR",
-    main: "20%",
-    sub: "Auto 26.6% / API 0.0%",
-    percent: 20,
+    main: "NOT CONNECTED",
+    mainLabel: "PROVIDER ADAPTER",
+    subtitle: "Real usage integration is reserved for the next version",
+    rows: [],
     status: "mock",
+  };
+}
+
+function createUsageRow(
+  id: string,
+  label: string,
+  value: number | null | undefined,
+  resetText?: string | null,
+): UsageProgressSnapshot {
+  return {
+    id,
+    label: label === "--" ? "WINDOW" : label.toUpperCase(),
+    percent: clampPercent(value) ?? 0,
+    valueText: formatPercent(value),
+    resetText: resetText ?? undefined,
   };
 }
 
@@ -166,10 +227,11 @@ function resolveSnapshotStatus<T>(
 }
 
 function withStaleSuffix(text: string, error: string) {
-  return error ? `${text} / stale` : text;
+  return error ? `${text} · CACHED` : text;
 }
 
 function normalizeError(error: string) {
   const value = error.trim();
-  return value ? value : undefined;
+  if (!value) return undefined;
+  return value.length > 220 ? `${value.slice(0, 220)}...` : value;
 }

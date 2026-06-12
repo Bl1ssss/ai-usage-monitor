@@ -1,11 +1,13 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import { ProviderCard } from "./components/ProviderCard";
 import {
   SettingsPanel,
   type SettingsActionKey,
   type SettingsMessages,
 } from "./components/SettingsPanel";
-import { UsageCard } from "./components/UsageCard";
 import { loadCache, saveCache } from "./providers/cache";
 import { fetchCodex } from "./providers/codex";
 import { fetchDeepSeek } from "./providers/deepseek";
@@ -345,6 +347,20 @@ export default function App() {
     settings.codexProxyUrl,
   ]);
 
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+
+    void listen("tray-refresh", () => {
+      void refreshAll(settings);
+    }).then((unlisten) => {
+      dispose = unlisten;
+    });
+
+    return () => dispose?.();
+    // Re-register with the latest settings used by the tray refresh action.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
   const snapshots = useMemo(
     () =>
       createProviderSnapshots({
@@ -360,42 +376,61 @@ export default function App() {
   );
 
   const providerSummary = summarizeProviderStatus(snapshots);
+  const attention = snapshots.some((snapshot) =>
+    ["warning", "error", "stale"].includes(snapshot.status),
+  );
+
+  function hideToTray() {
+    void invoke("hide_to_tray");
+  }
 
   return (
     <main className="dashboard">
       <header className="topbar">
-        <div>
+        <div className="brand-block">
           <div className="app-title">AI USAGE MONITOR</div>
-          <div className="app-subtitle">Windows Desktop Widget · {providerSummary}</div>
+          <div className="app-subtitle">{providerSummary}</div>
         </div>
 
-        <div className="weather">
-          <div>SHENZHEN</div>
-          <div>31°C</div>
+        <div className="topbar-actions">
+          <span className={`health-dot ${attention ? "health-attention" : ""}`} />
+          <button
+            className="icon-button"
+            onClick={() => void refreshAll(settings)}
+            disabled={refreshStatus === "refreshing"}
+            title="Refresh all providers"
+            aria-label="Refresh all providers"
+          >
+            ↻
+          </button>
+          <button
+            className="icon-button"
+            onClick={() => setShowSettings(true)}
+            title="Open settings"
+            aria-label="Open settings"
+          >
+            ⚙
+          </button>
+          <button
+            className="icon-button"
+            onClick={hideToTray}
+            title="Hide to system tray"
+            aria-label="Hide to system tray"
+          >
+            ×
+          </button>
         </div>
       </header>
 
-      <div className="divider" />
-
-      <section className="grid">
+      <section className="provider-list">
         {snapshots.map((snapshot) => (
-          <UsageCard key={snapshot.id} snapshot={snapshot} />
+          <ProviderCard key={snapshot.id} snapshot={snapshot} />
         ))}
       </section>
 
       <footer className="footer">
-        <span>last updated: {formatTime(lastUpdated)}</span>
-        <span>{refreshStatus}</span>
-
-        <div className="footer-actions">
-          <button className="refresh-button" onClick={() => void refreshAll(settings)}>
-            refresh
-          </button>
-
-          <button className="refresh-button" onClick={() => setShowSettings(true)}>
-            settings
-          </button>
-        </div>
+        <span>UPDATED {formatTime(lastUpdated)}</span>
+        <span className={`refresh-state refresh-state-${refreshStatus}`}>{refreshStatus}</span>
       </footer>
 
       {showSettings && (

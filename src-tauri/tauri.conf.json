@@ -12,12 +12,18 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "AI Usage Monitor",
-        "width": 620,
-        "height": 420,
-        "resizable": false,
+        "width": 430,
+        "height": 720,
+        "minWidth": 390,
+        "minHeight": 540,
+        "resizable": true,
         "decorations": true,
-        "alwaysOnTop": true
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "shadow": true
       }
     ],
     "security": {

@@ -1,49 +1,89 @@
-# Local discovery + setup actions patch
+# AI Usage Monitor v0.3 Tray + Vertical UI patch
 
-This patch is based on the current `main` branch of `Bl1ssss/ai-usage-monitor` and implements the first three configuration steps:
+This patch is based on the current `Bl1ssss/ai-usage-monitor` main branch and preserves:
 
-1. Rust local discovery for Codex auth, OpenCode Go config, DeepSeek environment key, and proxy environment variables.
-2. Startup auto-application of discovered non-secret paths and proxy values when the current setting is blank.
-3. Settings UI actions for Auto Detect, Choose File, and provider connection tests.
+- DeepSeek balance query
+- Codex usage query and proxy configuration
+- OpenCode Go usage query
+- ProviderSnapshot architecture
+- local cache
+- local source discovery
+- settings auto-detect / choose file / test buttons
 
-## Files added
+## Added
 
-- `src-tauri/src/discovery.rs`
-- `src/providers/discovery.ts`
+### Windows tray behavior
+
+- Starts hidden in the Windows system tray
+- Left-click tray icon toggles show/hide
+- Right-click menu: Show, Hide, Refresh, Quit
+- Clicking the native close button hides the window instead of exiting
+- Window moves to the bottom-right before showing
+- Window stays always-on-top and does not occupy the taskbar
+
+### Vertical dashboard
+
+- Replaces the 2 x 2 grid with a single vertical provider list
+- Codex displays primary and secondary windows as separate progress bars
+- OpenCode Go displays 5H, WEEK and MONTH as separate progress bars
+- DeepSeek retains a balance-focused card
+- Cursor no longer shows misleading mock percentages; it is clearly marked as not connected
+
+### UI update
+
+- G-Helper-inspired light panel layout
+- Rounded cards, status chips and provider accent colors
+- Scrollable narrow window designed for the lower-right corner
+- Full-window settings overlay adapted for the narrow layout
 
 ## Files replaced
 
 - `src/App.tsx`
 - `src/App.css`
-- `src/components/SettingsPanel.tsx`
-- `src/providers/deepseek.ts`
-- `src/types/settings.ts`
-- `src-tauri/src/deepseek.rs`
-- `src-tauri/src/lib.rs`
+- `src/types/metrics.ts`
+- `src/providers/snapshots.ts`
+- `src/components/UsageCard.tsx`
 - `src-tauri/Cargo.toml`
-- `src-tauri/capabilities/default.json`
-- `package.json`
+- `src-tauri/tauri.conf.json`
+- `src-tauri/src/lib.rs`
 
-## Install
+## Files added
 
-Copy the files over the repository while preserving their paths, then run:
+- `src/components/ProviderCard.tsx`
+- `src/components/UsageProgress.tsx`
+- `src-tauri/src/tray.rs`
+
+## Apply automatically
+
+From the extracted patch directory:
 
 ```powershell
-npm install
+Set-ExecutionPolicy -Scope Process Bypass
+.\APPLY_PATCH.ps1 -ProjectPath "F:\Postgraduate\Yue\ai-usage-monitor"
+```
+
+Then:
+
+```powershell
+cd F:\Postgraduate\Yue\ai-usage-monitor
 npm run tauri dev
 ```
 
-`npm install` is required because this patch adds `@tauri-apps/plugin-dialog`. Cargo will also download `tauri-plugin-dialog` during the next Tauri build.
+The first Rust build downloads and compiles `tauri-plugin-positioner` and the Tauri tray feature.
 
-## Discovery behavior
+## Apply manually
 
-- Codex: checks `CODEX_HOME/auth.json`, `%USERPROFILE%\.codex\auth.json`, and `$HOME/.codex/auth.json`.
-- OpenCode Go: checks the existing ai-usage-monitor, opencode-bar, and opencode-quota config paths.
-- DeepSeek: checks `DEEPSEEK_API_KEY` without returning the key to the frontend.
-- Proxy: checks `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, and `http_proxy`.
+Copy the patch's `src` and `src-tauri` directories over the project directories, preserving the folder structure.
 
-If a proxy URL contains embedded credentials, discovery reports that it exists but does not copy the value to the frontend.
+## Important behavior
 
-## Security boundary
+`src-tauri/tauri.conf.json` contains:
 
-This patch does not yet migrate secrets out of localStorage. That is the planned fourth step. It does ensure that environment secrets are never returned by the discovery command and are not added to `cache.json`.
+```json
+"visible": false,
+"skipTaskbar": true
+```
+
+Therefore the development window does not open automatically. Look for the application icon in the Windows system tray and left-click it.
+
+For temporary UI debugging, change `visible` to `true`.
